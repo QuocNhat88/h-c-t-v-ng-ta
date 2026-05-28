@@ -1,0 +1,5 @@
+node_modules
+dist
+.env
+backend/src/data/store.json
+npm-debug.log*
