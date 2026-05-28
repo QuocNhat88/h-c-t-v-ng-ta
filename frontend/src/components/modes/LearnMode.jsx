@@ -19,11 +19,21 @@ function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
-function buildQuestions(cards) {
+function unique(items) {
+  return [...new Set(items)];
+}
+
+function makeRoundCards(cards, priorityIds = []) {
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  const priorityCards = unique(priorityIds).map((id) => cardsById.get(id)).filter(Boolean);
+  return [...priorityCards, ...shuffle(cards)];
+}
+
+function buildQuestions(cards, allCards = cards) {
   return cards.map((card, index) => {
     const correct = displayMeaning(card.definition);
     const pool = [
-      ...cards.filter((item) => item.id !== card.id).map((item) => displayMeaning(item.definition)),
+      ...allCards.filter((item) => item.id !== card.id).map((item) => displayMeaning(item.definition)),
       ...fallbackChoices
     ].reduce((list, choice) => {
       const cleaned = displayMeaning(choice);
@@ -41,14 +51,16 @@ function buildQuestions(cards) {
 }
 
 export default function LearnMode({ set, cards }) {
-  const [sessionCards, setSessionCards] = useState(cards);
-  const questions = useMemo(() => buildQuestions(sessionCards), [sessionCards]);
+  const [sourceCards, setSourceCards] = useState(cards);
+  const [sessionCards, setSessionCards] = useState(() => makeRoundCards(cards));
+  const questions = useMemo(() => buildQuestions(sessionCards, sourceCards.length ? sourceCards : cards), [cards, sessionCards, sourceCards]);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState("");
   const [answered, setAnswered] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [missedCount, setMissedCount] = useState(0);
   const [combo, setCombo] = useState(0);
+  const [roundStatus, setRoundStatus] = useState({});
   const [showSettings, setShowSettings] = useState(false);
   const [soundOn, setSoundOn] = useState(isSoundEnabled());
   const [speechOn, setSpeechOn] = useState(isSpeechEnabled());
@@ -57,12 +69,14 @@ export default function LearnMode({ set, cards }) {
   useEffect(() => {
     getStudySession(set.id)
       .then((data) => {
-        setSessionCards(data.length ? data : cards);
-        setIndex(0);
-        setSelected("");
-        setAnswered(false);
+        const nextSourceCards = data.length ? data : cards;
+        setSourceCards(nextSourceCards);
+        beginRound(makeRoundCards(nextSourceCards));
       })
-      .catch(() => setSessionCards(cards));
+      .catch(() => {
+        setSourceCards(cards);
+        beginRound(makeRoundCards(cards));
+      });
   }, [set.id, cards]);
 
   useEffect(() => {
@@ -93,9 +107,25 @@ export default function LearnMode({ set, cards }) {
   const progress = isComplete ? 100 : (index / questions.length) * 100;
   const xp = correctCount * 12 + combo * 3;
 
+  function beginRound(nextCards) {
+    setSessionCards(nextCards);
+    setIndex(0);
+    setSelected("");
+    setAnswered(false);
+    setCorrectCount(0);
+    setMissedCount(0);
+    setCombo(0);
+    setRoundStatus({});
+  }
+
+  function getMissedIds() {
+    return unique(sessionCards.filter((item) => roundStatus[item.id] === "learning").map((item) => item.id));
+  }
+
   async function choose(choice) {
     if (answered || !card) return;
     const isCorrect = compareMeaning(choice, card.definition);
+    setRoundStatus((current) => ({ ...current, [card.id]: isCorrect ? "known" : "learning" }));
     setSelected(choice);
     setAnswered(true);
     setCorrectCount((current) => current + (isCorrect ? 1 : 0));
@@ -108,6 +138,7 @@ export default function LearnMode({ set, cards }) {
 
   async function dontKnow() {
     if (answered || !card) return;
+    setRoundStatus((current) => ({ ...current, [card.id]: "learning" }));
     setSelected("");
     setAnswered(true);
     setMissedCount((current) => current + 1);
@@ -125,13 +156,8 @@ export default function LearnMode({ set, cards }) {
   }
 
   function restart() {
-    setIndex(0);
-    setSelected("");
-    setAnswered(false);
-    setCorrectCount(0);
-    setMissedCount(0);
-    setCombo(0);
-    setSessionCards(shuffle(sessionCards));
+    const nextSourceCards = sourceCards.length ? sourceCards : cards;
+    beginRound(makeRoundCards(nextSourceCards, getMissedIds()));
     playTone("match");
   }
 

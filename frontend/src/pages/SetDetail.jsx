@@ -1,27 +1,20 @@
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import BulkImport from "../components/BulkImport.jsx";
 import CardEditor from "../components/CardEditor.jsx";
 import CardManager from "../components/CardManager.jsx";
 import ExportMenu from "../components/ExportMenu.jsx";
 import Shell from "../components/layout/Shell.jsx";
-import ModeGrid from "../components/modes/ModeGrid.jsx";
-import BlastMode from "../components/modes/BlastMode.jsx";
-import BlocksMode from "../components/modes/BlocksMode.jsx";
-import FlashcardMode from "../components/modes/FlashcardMode.jsx";
-import LearnMode from "../components/modes/LearnMode.jsx";
-import MatchMode from "../components/modes/MatchMode.jsx";
-import TestMode from "../components/modes/TestMode.jsx";
 import SetDashboard from "../components/SetDashboard.jsx";
+import ModeGrid from "../components/modes/ModeGrid.jsx";
 import { getSet, getStudySummary } from "../services/api.js";
 
 export default function SetDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [set, setSet] = useState(null);
   const [summary, setSummary] = useState(null);
-  const [activeMode, setActiveMode] = useState("flashcards");
-  const learningAreaRef = useRef(null);
 
   useEffect(() => {
     getSet(id).then(setSet);
@@ -61,10 +54,7 @@ export default function SetDetail() {
   }
 
   function openMode(mode) {
-    setActiveMode(mode);
-    window.setTimeout(() => {
-      learningAreaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    navigate(`/sets/${id}/modes/${mode}`);
   }
 
   const action = set ? (
@@ -105,15 +95,7 @@ export default function SetDetail() {
           onStartMatch={() => openMode("match")}
           onStartBlast={() => openMode("blast")}
         />
-        <div ref={learningAreaRef} className="scroll-mt-24 space-y-5">
-          <ModeGrid activeMode={activeMode} onModeChange={openMode} />
-          {activeMode === "flashcards" && <FlashcardMode set={set} cards={cards} />}
-          {activeMode === "learn" && <LearnMode set={set} cards={cards} />}
-          {activeMode === "test" && <TestMode set={set} cards={cards} />}
-          {activeMode === "match" && <MatchMode set={set} cards={cards} />}
-          {activeMode === "blast" && <BlastMode set={set} cards={cards} />}
-          {activeMode === "blocks" && <BlocksMode set={set} cards={cards} />}
-        </div>
+        <ModeGrid onModeChange={openMode} />
         <BulkImport set={set} onImported={addCards} />
         <CardEditor set={set} onCreated={addCard} />
         <CardManager set={set} cards={cards} onUpdated={updateCardInSet} onDeleted={deleteCardFromSet} />

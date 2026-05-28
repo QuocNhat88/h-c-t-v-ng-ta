@@ -1,8 +1,12 @@
 import { ApiError } from "../../utils/ApiError.js";
 import { CardModel } from "../cards/card.model.js";
+import { ScoreModel } from "../games/score.model.js";
+import { ProgressModel } from "../study/progress.model.js";
+import { ensureDefaultLibraryFolders } from "../folders/folders.service.js";
 import { SetModel } from "./set.model.js";
 
 export async function listSets() {
+  await ensureDefaultLibraryFolders();
   const sets = await SetModel.find().sort({ updatedAt: -1 });
   const counts = await CardModel.aggregate([
     { $group: { _id: "$setId", cardCount: { $sum: 1 } } }
@@ -57,7 +61,11 @@ export async function updateSet(id, payload) {
 export async function deleteSet(id) {
   const set = await SetModel.findByIdAndDelete(id);
   if (!set) throw new ApiError(404, "Set not found");
-  await CardModel.deleteMany({ setId: id });
+  await Promise.all([
+    CardModel.deleteMany({ setId: id }),
+    ProgressModel.deleteMany({ setId: id }),
+    ScoreModel.deleteMany({ setId: id })
+  ]);
   return { id };
 }
 

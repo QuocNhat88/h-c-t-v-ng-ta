@@ -19,6 +19,12 @@ const setSchema = new mongoose.Schema(
     targetLanguage: {
       type: String,
       default: "vi-VN"
+    },
+    folderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Folder",
+      index: true,
+      default: null
     }
   },
   {
@@ -27,6 +33,7 @@ const setSchema = new mongoose.Schema(
       virtuals: true,
       transform(doc, ret) {
         ret.id = ret._id.toString();
+        if (ret.folderId) ret.folderId = ret.folderId.toString();
         delete ret._id;
         delete ret.__v;
       }

@@ -4,18 +4,41 @@ import { playTone, speak } from "../../utils/audio.js";
 import { displayMeaning } from "../../utils/vietnamese.js";
 import EmptyState from "./EmptyState.jsx";
 
+function shuffle(items) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function unique(items) {
+  return [...new Set(items)];
+}
+
+function makeBaseDeck(cards) {
+  return cards.map((card) => card.id);
+}
+
+function makeRoundDeck(cards, priorityIds = []) {
+  const baseDeck = makeBaseDeck(cards);
+  const validPriorityIds = unique(priorityIds).filter((id) => baseDeck.includes(id));
+  return [...validPriorityIds, ...baseDeck];
+}
+
 export default function FlashcardMode({ set, cards }) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [order, setOrder] = useState(cards.map((_, cardIndex) => cardIndex));
+  const [deck, setDeck] = useState(() => makeBaseDeck(cards));
   const [knownIds, setKnownIds] = useState([]);
   const [learningIds, setLearningIds] = useState([]);
-  const card = useMemo(() => cards[order[index] || 0], [cards, index, order]);
+  const [roundStatus, setRoundStatus] = useState({});
+  const cardsById = useMemo(() => new Map(cards.map((item) => [item.id, item])), [cards]);
+  const card = useMemo(() => cardsById.get(deck[index]) || cards[0], [cards, cardsById, deck, index]);
 
   useEffect(() => {
-    setOrder(cards.map((_, cardIndex) => cardIndex));
+    setDeck(makeBaseDeck(cards));
     setIndex(0);
     setFlipped(false);
+    setKnownIds([]);
+    setLearningIds([]);
+    setRoundStatus({});
   }, [cards]);
 
   useEffect(() => {
@@ -38,7 +61,8 @@ export default function FlashcardMode({ set, cards }) {
 
   if (!cards.length) return <EmptyState />;
 
-  const progress = ((index + 1) / cards.length) * 100;
+  const deckSize = deck.length || cards.length;
+  const progress = ((index + 1) / deckSize) * 100;
 
   function flip() {
     setFlipped((value) => !value);
@@ -46,36 +70,54 @@ export default function FlashcardMode({ set, cards }) {
   }
 
   function next() {
-    setIndex((current) => (current + 1) % cards.length);
+    advance(roundStatus);
+  }
+
+  function advance(status) {
+    if (!deck.length) return;
+    if (index >= deck.length - 1) {
+      const missedIds = deck.filter((cardId) => status[cardId] === "learning");
+      setDeck(makeRoundDeck(cards, missedIds));
+      setIndex(0);
+      setRoundStatus({});
+    } else {
+      setIndex((current) => current + 1);
+    }
     setFlipped(false);
     playTone("tap");
   }
 
   function previous() {
-    setIndex((current) => (current - 1 + cards.length) % cards.length);
+    if (!deck.length) return;
+    setIndex((current) => (current - 1 + deck.length) % deck.length);
     setFlipped(false);
     playTone("tap");
   }
 
   function mark(kind) {
+    const nextStatus = { ...roundStatus, [card.id]: kind };
+    setRoundStatus(nextStatus);
     setKnownIds((current) => current.filter((id) => id !== card.id));
     setLearningIds((current) => current.filter((id) => id !== card.id));
-    if (kind === "known") setKnownIds((current) => [...current, card.id]);
-    if (kind === "learning") setLearningIds((current) => [...current, card.id]);
+    if (kind === "known") setKnownIds((current) => unique([...current, card.id]));
+    if (kind === "learning") setLearningIds((current) => unique([...current, card.id]));
     playTone(kind === "known" ? "correct" : "wrong");
-    next();
+    advance(nextStatus);
   }
 
   function shuffleCards() {
-    setOrder(cards.map((_, cardIndex) => cardIndex).sort(() => Math.random() - 0.5));
+    setDeck(shuffle(makeBaseDeck(cards)));
     setIndex(0);
     setFlipped(false);
+    setRoundStatus({});
     playTone("match");
   }
 
   function reset() {
+    setDeck(makeBaseDeck(cards));
     setKnownIds([]);
     setLearningIds([]);
+    setRoundStatus({});
     setIndex(0);
     setFlipped(false);
     playTone("tap");
@@ -96,7 +138,7 @@ export default function FlashcardMode({ set, cards }) {
       </div>
 
       <div className="mb-5 grid grid-cols-3 gap-2 sm:gap-3">
-        <Stat label="Đang xem" value={`${index + 1}/${cards.length}`} />
+        <Stat label="Đang xem" value={`${index + 1}/${deckSize}`} />
         <Stat label="Đã thuộc" value={knownIds.length} tone="text-emerald-700" />
         <Stat label="Cần ôn" value={learningIds.length} tone="text-orange-700" />
       </div>

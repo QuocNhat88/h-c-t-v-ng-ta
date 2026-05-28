@@ -5,9 +5,20 @@ import { compareMeaning, displayMeaning } from "../../utils/vietnamese.js";
 import EmptyState from "./EmptyState.jsx";
 
 const fallbackChoices = ["đồ uống", "thực hiện", "quan trọng", "người bạn", "học tập", "cấp phát"];
+const questionTypes = ["written", "choice", "trueFalse"];
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
+}
+
+function unique(items) {
+  return [...new Set(items)];
+}
+
+function makeRoundCards(cards, priorityIds = []) {
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  const priorityCards = unique(priorityIds).map((id) => cardsById.get(id)).filter(Boolean);
+  return [...priorityCards, ...shuffle(cards)];
 }
 
 function makeChoices(card, cards) {
@@ -17,26 +28,51 @@ function makeChoices(card, cards) {
       const duplicate = list.some((item) => compareMeaning(item, choice));
       if (!duplicate && !compareMeaning(choice, correct)) list.push(choice);
       return list;
-    }, [])
-    .slice(0, 3);
-  return shuffle([correct, ...pool]);
+    }, []);
+  return shuffle([correct, ...shuffle(pool).slice(0, 3)]);
 }
 
-function buildQuestions(cards) {
+function makeStatementDefinition(card, cards) {
+  const correct = displayMeaning(card.definition);
+  if (Math.random() < 0.5) return correct;
+
+  const distractors = cards
+    .filter((item) => item.id !== card.id)
+    .map((item) => displayMeaning(item.definition))
+    .filter((definition) => !compareMeaning(definition, correct));
+
+  return shuffle(distractors)[0] || correct;
+}
+
+function buildQuestions(cards, allCards = cards, round = 0) {
   return cards.map((card, index) => ({
     ...card,
-    type: index % 3 === 0 ? "written" : index % 3 === 1 ? "choice" : "trueFalse",
-    choices: makeChoices(card, cards),
-    statementDefinition: index % 2 === 0 ? displayMeaning(card.definition) : displayMeaning(shuffle(cards.filter((item) => item.id !== card.id))[0]?.definition || card.definition)
+    questionId: `${card.id}-${round}-${index}`,
+    type: questionTypes[Math.floor(Math.random() * questionTypes.length)],
+    choices: makeChoices(card, allCards),
+    statementDefinition: makeStatementDefinition(card, allCards)
   }));
 }
 
 export default function TestMode({ set, cards }) {
+  const [testCards, setTestCards] = useState(() => makeRoundCards(cards));
+  const [round, setRound] = useState(0);
+  const [missedIds, setMissedIds] = useState([]);
   const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState({});
   const [score, setScore] = useState(null);
   const [seconds, setSeconds] = useState(0);
-  const questions = useMemo(() => buildQuestions(cards), [cards]);
+  const questions = useMemo(() => buildQuestions(testCards, cards, round), [cards, round, testCards]);
+
+  useEffect(() => {
+    setTestCards(makeRoundCards(cards));
+    setRound((current) => current + 1);
+    setMissedIds([]);
+    setStarted(false);
+    setAnswers({});
+    setScore(null);
+    setSeconds(0);
+  }, [cards]);
 
   useEffect(() => {
     if (!started || score !== null) return;
@@ -51,11 +87,14 @@ export default function TestMode({ set, cards }) {
 
   function grade() {
     const points = questions.reduce((total, question) => total + (isCorrect(question) ? 1 : 0), 0);
+    setMissedIds(unique(questions.filter((question) => !isCorrect(question)).map((question) => question.id)));
     setScore(points);
     playTone(points === questions.length ? "correct" : "wrong");
   }
 
   function restart() {
+    setTestCards(makeRoundCards(cards, score !== null ? missedIds : []));
+    setRound((current) => current + 1);
     setStarted(false);
     setAnswers({});
     setScore(null);
@@ -64,7 +103,7 @@ export default function TestMode({ set, cards }) {
   }
 
   function isCorrect(question) {
-    const answer = answers[question.id];
+    const answer = answers[question.questionId];
     if (question.type === "trueFalse") {
       const statementIsTrue = compareMeaning(question.statementDefinition, question.definition);
       return answer === String(statementIsTrue);
@@ -126,7 +165,7 @@ export default function TestMode({ set, cards }) {
           const checked = score !== null;
           const correct = checked && isCorrect(question);
           return (
-            <div key={question.id} className={`rounded-lg border p-4 transition ${checked ? (correct ? "border-emerald-200 bg-emerald-50/60" : "border-orange-200 bg-orange-50/60") : "border-line bg-white"}`}>
+            <div key={question.questionId} className={`rounded-lg border p-4 transition ${checked ? (correct ? "border-emerald-200 bg-emerald-50/60" : "border-orange-200 bg-orange-50/60") : "border-line bg-white"}`}>
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-black uppercase text-slate-400">Câu {index + 1}</p>
@@ -142,9 +181,9 @@ export default function TestMode({ set, cards }) {
                   {question.choices.map((choice) => (
                     <button
                       key={choice}
-                      onClick={() => setAnswer(question.id, choice)}
+                      onClick={() => setAnswer(question.questionId, choice)}
                       className={`rounded-lg border px-3 py-3 text-left font-semibold transition hover:border-brand ${
-                        compareMeaning(answers[question.id] || "", choice) ? "border-brand bg-brand/10 text-brand" : "border-line bg-white"
+                        compareMeaning(answers[question.questionId] || "", choice) ? "border-brand bg-brand/10 text-brand" : "border-line bg-white"
                       }`}
                     >
                       {choice}
@@ -155,8 +194,8 @@ export default function TestMode({ set, cards }) {
 
               {question.type === "written" && (
                 <input
-                  value={answers[question.id] || ""}
-                  onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
+                  value={answers[question.questionId] || ""}
+                  onChange={(event) => setAnswers((current) => ({ ...current, [question.questionId]: event.target.value }))}
                   className="w-full rounded-lg border border-line px-3 py-3 outline-none focus:border-brand focus:ring-4 focus:ring-brand/10"
                   placeholder="Nhập nghĩa tiếng Việt..."
                 />
@@ -166,10 +205,10 @@ export default function TestMode({ set, cards }) {
                 <div>
                   <p className="mb-3 rounded-lg bg-cloud p-3 font-semibold">{question.term} = {question.statementDefinition}</p>
                   <div className="flex gap-2">
-                    <button onClick={() => setAnswer(question.id, "true")} className={`rounded-lg border px-4 py-2 font-bold ${answers[question.id] === "true" ? "border-brand bg-brand/10 text-brand" : "border-line"}`}>
+                    <button onClick={() => setAnswer(question.questionId, "true")} className={`rounded-lg border px-4 py-2 font-bold ${answers[question.questionId] === "true" ? "border-brand bg-brand/10 text-brand" : "border-line"}`}>
                       Đúng
                     </button>
-                    <button onClick={() => setAnswer(question.id, "false")} className={`rounded-lg border px-4 py-2 font-bold ${answers[question.id] === "false" ? "border-brand bg-brand/10 text-brand" : "border-line"}`}>
+                    <button onClick={() => setAnswer(question.questionId, "false")} className={`rounded-lg border px-4 py-2 font-bold ${answers[question.questionId] === "false" ? "border-brand bg-brand/10 text-brand" : "border-line"}`}>
                       Sai
                     </button>
                   </div>

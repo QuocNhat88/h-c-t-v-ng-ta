@@ -6,7 +6,8 @@ const setSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   sourceLanguage: z.string().optional(),
-  targetLanguage: z.string().optional()
+  targetLanguage: z.string().optional(),
+  folderId: z.string().optional().nullable()
 });
 
 export const list = asyncHandler(async (req, res) => {

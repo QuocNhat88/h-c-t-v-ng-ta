@@ -6,6 +6,7 @@ import { errorHandler, notFound } from "./middlewares/error.middleware.js";
 import setRoutes from "./modules/sets/sets.route.js";
 import cardRoutes from "./modules/cards/cards.route.js";
 import dictionaryRoutes from "./modules/dictionary/dictionary.route.js";
+import folderRoutes from "./modules/folders/folders.route.js";
 import studyRoutes from "./modules/study/study.route.js";
 import testRoutes from "./modules/tests/tests.route.js";
 import gameRoutes from "./modules/games/games.route.js";
@@ -21,6 +22,7 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/sets", setRoutes);
+app.use("/api/folders", folderRoutes);
 app.use("/api/cards", cardRoutes);
 app.use("/api/dictionary", dictionaryRoutes);
 app.use("/api/study", studyRoutes);

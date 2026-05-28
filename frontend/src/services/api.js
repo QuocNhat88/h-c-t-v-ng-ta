@@ -9,6 +9,21 @@ export async function getSets() {
   return data;
 }
 
+export async function getFolders() {
+  const { data } = await api.get("/folders");
+  return data;
+}
+
+export async function createFolder(payload) {
+  const { data } = await api.post("/folders", payload);
+  return data;
+}
+
+export async function deleteFolder(id) {
+  const { data } = await api.delete(`/folders/${id}`);
+  return data;
+}
+
 export async function getSet(id) {
   const { data } = await api.get(`/sets/${id}`);
   return data;
@@ -20,6 +35,11 @@ export function getSetExportUrl(id, format) {
 
 export async function createSet(payload) {
   const { data } = await api.post("/sets", payload);
+  return data;
+}
+
+export async function deleteSet(id) {
+  const { data } = await api.delete(`/sets/${id}`);
   return data;
 }
 
